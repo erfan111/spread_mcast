@@ -38,6 +38,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
+#include <sys/time.h>
 
 #define int32u unsigned int
 #define FLOW_CONTROL_VALVE 1000
@@ -77,7 +79,7 @@ typedef struct sessionT {
 	int delay;
 
 	struct timeval *timoutTimestamps;
-	struct STATE state;
+	enum STATE state;
 
 	u_int32_t machineIndex;
 	u_int32_t numberOfPackets;
@@ -467,7 +469,7 @@ static void prepareFile() {
 	sprintf(fileName, "%d.out", currentSession.machineIndex);
 	if ((currentSession.f = fopen(fileName, "w")) == NULL) {
 		perror("fopen");
-		log_fatal("Error opening output file");
+		printf("Error opening output file\n");
 		exit(0);
 	}
 }
