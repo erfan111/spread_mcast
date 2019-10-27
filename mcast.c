@@ -40,6 +40,7 @@
 #include <string.h>
 #include <time.h>
 #include <sys/time.h>
+#include <unistd.h>
 
 #define int32u unsigned int
 #define FLOW_CONTROL_VALVE 1000
@@ -76,6 +77,7 @@ enum STATE {
 typedef struct sessionT {
 	int numberOfMachines;
 	int delay;
+    int readyToTerminate;
 
 	struct timeval *timoutTimestamps;
 	enum STATE state;
@@ -84,6 +86,7 @@ typedef struct sessionT {
 	u_int32_t numberOfPackets;
 	u_int32_t lastSentIndex;
 	u_int32_t *finishedProcesses;
+    u_int32_t *exitingProcesses;
 
 	struct timeval start, end;
 
@@ -97,6 +100,8 @@ static void startSending();
 static void prepareFile();
 static void initializeSession();
 static void sendFinMessage();
+static void sendExitingMessage();
+
 static void sendMessage();
 static void checkTermination();
 static void initializeAndSendRandomNumber();
@@ -405,10 +410,11 @@ static void Usage(int argc, char *argv[]) {
 		exit(1);
 	}
 	currentSession.delay = FLOW_CONTROL_VALVE;
-
+    
 	currentSession.numberOfPackets = atoi(argv[1]);
 	currentSession.machineIndex = atoi(argv[2]);
 	currentSession.numberOfMachines = atoi(argv[3]);
+    printf("num pack = %d, machine idx = %d, numof machines = %d\n", currentSession.numberOfPackets, currentSession.machineIndex, currentSession.numberOfMachines);
 }
 
 static void Bye() {
@@ -424,17 +430,18 @@ static void Bye() {
 }
 
 static void initializeAndSendRandomNumber() {
+    int ret;
 	u_int32_t randomNumber = rand() % 1000000;
 	char data[1312];
 	char groups[1][MAX_GROUP_NAME];
 	sscanf("eshfy1", "%s", groups[0]);
-
+    
 	++currentSession.lastSentIndex;
 	memcpy(data, &currentSession.machineIndex, 4);
 	memcpy(data + 4, &currentSession.lastSentIndex, 4);
 	memcpy(data + 8, &randomNumber, 4);
 	memcpy(data + 12, &garbage_data, 1300);
-
+    printf("sending index %d\n", currentSession.lastSentIndex);
 	if (currentSession.lastSentIndex == currentSession.numberOfPackets)
 	{
 		currentSession.state = STATE_FINALIZING;
@@ -444,15 +451,20 @@ static void initializeAndSendRandomNumber() {
 		printf("sending data message with number %d, index %d\n", randomNumber,
 				currentSession.lastSentIndex);
 	}
-
-	SP_multigroup_multicast(Mbox, AGREED_MESS, 1,
+    usleep(10000);
+	ret = SP_multigroup_multicast(Mbox, AGREED_MESS, 1,
 			(const char (*)[MAX_GROUP_NAME]) groups, 1, 1312, data);
+    printf("ret status %d\n", ret);
+    if(ret < 0)
+        SP_error( ret );
 
 }
 
 static void startSending() {
 	int i;
+    printf("starting to send (session nop = %d ) ", currentSession.numberOfPackets);
 	int pcktsToSend = currentSession.numberOfPackets < STARTINGBURST ? currentSession.numberOfPackets : STARTINGBURST;
+    printf("%d packets\n", pcktsToSend);
 	for (i = 0; i < pcktsToSend; i++) {
 		initializeAndSendRandomNumber();
 	}
@@ -473,8 +485,11 @@ static void deliverMessage(char *message) {
 	memcpy(&pid, message, 4);
 	memcpy(&index, message + 4, 4);
 	memcpy(&number, message + 8, 4);
+    printf("delivering pid %d, indx %d, num %d\n", pid, index, number);
 	if(index == 0)
 		currentSession.finishedProcesses[pid - 1] = 1;
+    else if(index == -1)
+        currentSession.exitingProcesses[pid - 1] = 1;
 	else
 		fprintf(currentSession.f, "%2d, %8d, %8d\n", pid, index, number);
 }
@@ -491,21 +506,38 @@ static void initializeSession()
 {
 	currentSession.finishedProcesses = (u_int32_t*) calloc(
 			currentSession.numberOfMachines, sizeof(u_int32_t));
-
+    currentSession.exitingProcesses = (u_int32_t*) calloc(
+            currentSession.numberOfMachines, sizeof(u_int32_t));
 	currentSession.lastSentIndex = 0;
-	currentSession.numberOfPackets = 0;
+//	currentSession.numberOfPackets = 0;
 	currentSession.state = STATE_WAITING;
+    currentSession.readyToTerminate = 0;
 }
 
 static void checkTermination()
 {
 	int i;
-	for(i = 0;i< currentSession.numberOfMachines; i++)
-	{
-		if(currentSession.finishedProcesses[i] == 0)
-			return;
-	}
-	Bye();
+    if(currentSession.readyToTerminate)
+    {
+        for(i = 0;i< currentSession.numberOfMachines; i++)
+        {
+            if(currentSession.exitingProcesses[i] == 0)
+                return;
+        }
+        Bye();
+
+    }
+    else
+    {
+	    for(i = 0;i< currentSession.numberOfMachines; i++)
+	    {
+		    if(currentSession.finishedProcesses[i] == 0)
+		    	return;
+	    }
+	    sendExitingMessage();
+        currentSession.readyToTerminate = 1;
+        currentSession.exitingProcesses[currentSession.machineIndex - 1] = 1;
+    }
 }
 
 static void sendFinMessage()
@@ -520,8 +552,24 @@ static void sendFinMessage()
 	memcpy(data + 8, &idx, 4);
 	memcpy(data + 12, &garbage_data, 1300);
 
-	SP_multigroup_multicast(Mbox, AGREED_MESS, 1,
+	SP_multigroup_multicast(Mbox, SAFE_MESS, 1,
 			(const char (*)[MAX_GROUP_NAME]) groups, 1, 1312, data);
+}
+
+static void sendExitingMessage()
+{
+    u_int32_t idx = -1;
+    char data[1312];
+    char groups[1][MAX_GROUP_NAME];
+    sscanf("eshfy1", "%s", groups[0]);
+
+    memcpy(data, &currentSession.machineIndex, 4);
+    memcpy(data + 4, &idx, 4);
+    memcpy(data + 8, &idx, 4);
+    memcpy(data + 12, &garbage_data, 1300);
+
+    SP_multigroup_multicast(Mbox, SAFE_MESS, 1,
+            (const char (*)[MAX_GROUP_NAME]) groups, 1, 1312, data);
 }
 
 static int timediff_us(struct timeval tv2, struct timeval tv1) {
