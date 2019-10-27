@@ -62,7 +62,6 @@ static int To_exit = 0;
 #define MAX_VSSETS      10
 #define MAX_MEMBERS     100
 
-static void Print_menu();
 static void User_command();
 static void Read_message();
 static void Usage(int argc, char *argv[]);
@@ -291,7 +290,6 @@ static void User_command() {
 
 	default:
 		printf("\nUnknown commnad\n");
-		Print_menu();
 
 		break;
 	}
@@ -307,14 +305,11 @@ static void Read_message() {
 	char target_groups[MAX_MEMBERS][MAX_GROUP_NAME];
 	membership_info memb_info;
 	vs_set_info vssets[MAX_VSSETS];
-	unsigned int my_vsset_index;
-	int num_vs_sets;
-	char members[MAX_MEMBERS][MAX_GROUP_NAME];
 	int num_groups;
 	int service_type;
 	int16 mess_type;
 	int endian_mismatch;
-	int i, j;
+	int i;
 	int ret;
 
 	service_type = 0;
@@ -429,7 +424,6 @@ static void Bye() {
 }
 
 static void initializeAndSendRandomNumber() {
-	int ret;
 	u_int32_t randomNumber = rand() % 1000000;
 	char data[1312];
 	char groups[1][MAX_GROUP_NAME];
@@ -451,7 +445,7 @@ static void initializeAndSendRandomNumber() {
 				currentSession.lastSentIndex);
 	}
 
-	ret = SP_multigroup_multicast(Mbox, AGREED_MESS, 1,
+	SP_multigroup_multicast(Mbox, AGREED_MESS, 1,
 			(const char (*)[MAX_GROUP_NAME]) groups, 1, 1312, data);
 
 }
@@ -516,7 +510,6 @@ static void checkTermination()
 
 static void sendFinMessage()
 {
-	int ret;
 	u_int32_t idx = 0;
 	char data[1312];
 	char groups[1][MAX_GROUP_NAME];
@@ -527,7 +520,7 @@ static void sendFinMessage()
 	memcpy(data + 8, &idx, 4);
 	memcpy(data + 12, &garbage_data, 1300);
 
-	ret = SP_multigroup_multicast(Mbox, AGREED_MESS, 1,
+	SP_multigroup_multicast(Mbox, AGREED_MESS, 1,
 			(const char (*)[MAX_GROUP_NAME]) groups, 1, 1312, data);
 }
 
