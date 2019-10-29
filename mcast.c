@@ -321,7 +321,7 @@ static void Read_message() {
 
 	ret = SP_receive(Mbox, &service_type, sender, 100, &num_groups,
 			target_groups, &mess_type, &endian_mismatch, sizeof(mess), mess);
-	printf("\n============================\n");
+	//printf("\n============================\n");
 	if (ret < 0) {
 		if ((ret == GROUPS_TOO_SHORT) || (ret == BUFFER_TOO_SHORT)) {
 			service_type = DROP_RECV;
@@ -340,24 +340,25 @@ static void Read_message() {
 		exit(0);
 	}
 	if (Is_regular_mess(service_type)) {
-		mess[ret] = 0;
-		if (Is_unreliable_mess(service_type))
-			printf("received UNRELIABLE ");
-		else if (Is_reliable_mess(service_type))
-			printf("received RELIABLE ");
-		else if (Is_fifo_mess(service_type))
-			printf("received FIFO ");
-		else if (Is_causal_mess(service_type))
-			printf("received CAUSAL ");
-		else if (Is_agreed_mess(service_type))
-			printf("received AGREED ");
-		else if (Is_safe_mess(service_type))
-			printf("received SAFE ");
-		printf(
-				"message from %s, of type %d, (endian %d) to %d groups \n(%d bytes): %s\n",
-				sender, mess_type, endian_mismatch, num_groups, ret, mess);
+		//mess[ret] = 0;
+		//if (Is_unreliable_mess(service_type))
+		//	printf("received UNRELIABLE ");
+		//else if (Is_reliable_mess(service_type))
+		//	printf("received RELIABLE ");
+		//else if (Is_fifo_mess(service_type))
+		//	printf("received FIFO ");
+		//else if (Is_causal_mess(service_type))
+		//	printf("received CAUSAL ");
+		//else if (Is_agreed_mess(service_type))
+		//	printf("received AGREED ");
+		//else if (Is_safe_mess(service_type))
+		//	printf("received SAFE ");
+		//printf(
+		//		"message from %s, of type %d, (endian %d) to %d groups \n(%d bytes): %s\n",
+		//		sender, mess_type, endian_mismatch, num_groups, ret, mess);
 		deliverMessage(mess);
-		sendMessage();
+   
+		//sendMessage();
 		checkTermination();
 	} else if (Is_membership_mess(service_type)) {
 		ret = SP_get_memb_info(mess, service_type, &memb_info);
@@ -441,7 +442,7 @@ static void initializeAndSendRandomNumber() {
 	memcpy(data + 4, &currentSession.lastSentIndex, 4);
 	memcpy(data + 8, &randomNumber, 4);
 	memcpy(data + 12, &garbage_data, 1300);
-    printf("sending index %d\n", currentSession.lastSentIndex);
+    //printf("sending index %d\n", currentSession.lastSentIndex);
 	if (currentSession.lastSentIndex == currentSession.numberOfPackets)
 	{
 		currentSession.state = STATE_FINALIZING;
@@ -451,10 +452,10 @@ static void initializeAndSendRandomNumber() {
 		printf("sending data message with number %d, index %d\n", randomNumber,
 				currentSession.lastSentIndex);
 	}
-    usleep(10000);
+    //usleep(10000);
 	ret = SP_multigroup_multicast(Mbox, AGREED_MESS, 1,
 			(const char (*)[MAX_GROUP_NAME]) groups, 1, 1312, data);
-    printf("ret status %d\n", ret);
+    //printf("ret status %d\n", ret);
     if(ret < 0)
         SP_error( ret );
 
@@ -468,6 +469,8 @@ static void startSending() {
 	for (i = 0; i < pcktsToSend; i++) {
 		initializeAndSendRandomNumber();
 	}
+    if(currentSession.state == STATE_RECEIVING)
+        sendFinMessage();
 }
 
 static void prepareFile() {
@@ -485,13 +488,21 @@ static void deliverMessage(char *message) {
 	memcpy(&pid, message, 4);
 	memcpy(&index, message + 4, 4);
 	memcpy(&number, message + 8, 4);
-    printf("delivering pid %d, indx %d, num %d\n", pid, index, number);
-	if(index == 0)
-		currentSession.finishedProcesses[pid - 1] = 1;
-    else if(index == -1)
+    //printf("delivering pid %d, indx %d, num %d\n", pid, index, number);
+
+	if(index == 0){
+        currentSession.finishedProcesses[pid - 1] = 1;
+        printf("received FIN from %d\n", pid);
+    }
+	else if(index == -1)
+    {
+        printf("received FIN EXIT from %d\n", pid);
         currentSession.exitingProcesses[pid - 1] = 1;
+    }
 	else
 		fprintf(currentSession.f, "%2d, %8d, %8d\n", pid, index, number);
+    if(pid == currentSession.machineIndex && currentSession.state != STATE_RECEIVING)
+        sendMessage();
 }
 
 static void sendMessage()
@@ -522,7 +533,11 @@ static void checkTermination()
         for(i = 0;i< currentSession.numberOfMachines; i++)
         {
             if(currentSession.exitingProcesses[i] == 0)
+            {
+                printf("%d is not exiting\n", i+1);
                 return;
+            }
+                
         }
         Bye();
 
@@ -546,7 +561,7 @@ static void sendFinMessage()
 	char data[1312];
 	char groups[1][MAX_GROUP_NAME];
 	sscanf("eshfy1", "%s", groups[0]);
-
+    printf("sending Fin\n");
 	memcpy(data, &currentSession.machineIndex, 4);
 	memcpy(data + 4, &idx, 4);
 	memcpy(data + 8, &idx, 4);
