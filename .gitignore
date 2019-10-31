@@ -60,3 +60,4 @@ mcast
 .settings
 class_user
 sp_user
+.venv3/
