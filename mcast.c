@@ -43,7 +43,7 @@
 #include <unistd.h>
 
 #define int32u unsigned int
-#define FLOW_CONTROL_VALVE 1000
+
 #define STARTINGBURST 80
 
 char *garbage_data =
@@ -63,7 +63,6 @@ static int To_exit = 0;
 #define MAX_VSSETS      10
 #define MAX_MEMBERS     100
 
-static void User_command();
 static void Read_message();
 static void Usage(int argc, char *argv[]);
 static void Bye();
@@ -148,159 +147,6 @@ int main(int argc, char *argv[]) {
 	E_handle_events();
 
 	return (0);
-}
-
-static void User_command() {
-	char command[130];
-	char mess[MAX_MESSLEN];
-	char group[80];
-	char groups[10][MAX_GROUP_NAME];
-	int num_groups;
-	unsigned int mess_len;
-	int ret;
-	int i;
-
-	for (i = 0; i < sizeof(command); i++)
-		command[i] = 0;
-	if (fgets(command, 130, stdin) == NULL)
-		Bye();
-
-	switch (command[0]) {
-	case 'j':
-		ret = sscanf(&command[2], "%s", group);
-		if (ret < 1) {
-			printf(" invalid group \n");
-			break;
-		}
-		ret = SP_join(Mbox, group);
-		if (ret < 0)
-			SP_error(ret);
-
-		break;
-
-	case 'l':
-		ret = sscanf(&command[2], "%s", group);
-		if (ret < 1) {
-			printf(" invalid group \n");
-			break;
-		}
-		ret = SP_leave(Mbox, group);
-		if (ret < 0)
-			SP_error(ret);
-
-		break;
-
-	case 's':
-		num_groups = sscanf(&command[2], "%s%s%s%s%s%s%s%s%s%s", groups[0],
-				groups[1], groups[2], groups[3], groups[4], groups[5],
-				groups[6], groups[7], groups[8], groups[9]);
-		if (num_groups < 1) {
-			printf(" invalid group \n");
-			break;
-		}
-		printf("enter message: ");
-		if (fgets(mess, 200, stdin) == NULL)
-			Bye();
-		mess_len = strlen(mess);
-		ret = SP_multigroup_multicast(Mbox, AGREED_MESS, num_groups,
-				(const char (*)[MAX_GROUP_NAME]) groups, 1, mess_len, mess);
-		if (ret < 0) {
-			SP_error(ret);
-			Bye();
-		}
-		Num_sent++;
-
-		break;
-
-	case 'm':
-		num_groups = sscanf(&command[2], "%s%s%s%s%s%s%s%s%s%s", groups[0],
-				groups[1], groups[2], groups[3], groups[4], groups[5],
-				groups[6], groups[7], groups[8], groups[9]);
-		if (num_groups < 1) {
-			printf(" invalid group \n");
-			break;
-		}
-		printf("enter message: ");
-		mess_len = 0;
-		while (mess_len < MAX_MESSLEN) {
-			if (fgets(&mess[mess_len], 200, stdin) == NULL)
-				Bye();
-			if (mess[mess_len] == '\n')
-				break;
-			mess_len += strlen(&mess[mess_len]);
-		}
-		ret = SP_multigroup_multicast(Mbox, SAFE_MESS, num_groups,
-				(const char (*)[MAX_GROUP_NAME]) groups, 1, mess_len, mess);
-		if (ret < 0) {
-			SP_error(ret);
-			Bye();
-		}
-		Num_sent++;
-
-		break;
-
-	case 'b':
-		ret = sscanf(&command[2], "%s", group);
-		if (ret != 1)
-			strcpy(group, "dummy_group_name");
-		printf("enter size of each message: ");
-		if (fgets(mess, 200, stdin) == NULL)
-			Bye();
-		ret = sscanf(mess, "%u", &mess_len);
-		if (ret != 1)
-			mess_len = Previous_len;
-		if (mess_len > MAX_MESSLEN)
-			mess_len = MAX_MESSLEN;
-		Previous_len = mess_len;
-		printf("sending 10 messages of %u bytes\n", mess_len);
-		for (i = 0; i < 10; i++) {
-			Num_sent++;
-			sprintf(mess, "mess num %d ", Num_sent);
-			ret = SP_multicast(Mbox, FIFO_MESS, group, 2, mess_len, mess);
-
-			if (ret < 0) {
-				SP_error(ret);
-				Bye();
-			}
-			printf("sent message %d (total %d)\n", i + 1, Num_sent);
-		}
-		break;
-
-	case 'r':
-
-		Read_message();
-		break;
-
-	case 'p':
-
-		ret = SP_poll(Mbox);
-		printf("Polling sais: %d\n", ret);
-		break;
-
-	case 'e':
-
-		E_attach_fd(Mbox, READ_FD, Read_message, 0, NULL, HIGH_PRIORITY);
-
-		break;
-
-	case 'd':
-
-		E_detach_fd(Mbox, READ_FD);
-
-		break;
-
-	case 'q':
-		Bye();
-		break;
-
-	default:
-		printf("\nUnknown commnad\n");
-
-		break;
-	}
-	printf("\nUser> ");
-	fflush(stdout);
-
 }
 
 static void Read_message() {
@@ -410,7 +256,6 @@ static void Usage(int argc, char *argv[]) {
 				"Usage: ./mcast <num of packets> <machine index> <num of machines>  \n");
 		exit(1);
 	}
-	currentSession.delay = FLOW_CONTROL_VALVE;
     
 	currentSession.numberOfPackets = atoi(argv[1]);
 	currentSession.machineIndex = atoi(argv[2]);
